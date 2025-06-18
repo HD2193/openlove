@@ -21,6 +21,7 @@ const API_CONFIG = {
 const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
   const [chatInput, setChatInput] = useState('');
   const [currentSuggestion, setCurrentSuggestion] = useState('');
+  const [fullSuggestion, setFullSuggestion] = useState('');
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
   
@@ -152,6 +153,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
     setMessages(prev => [...prev, userMessage]);
     setChatInput('');
     setCurrentSuggestion('');
+    setFullSuggestion('');
 
     // 🤖 SEND TO N8N AND GET AI RESPONSE
     const aiResponse = await sendToN8N(message);
@@ -184,11 +186,14 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         const bestMatch = matches[0];
         const suggestion = bestMatch.substring(chatInput.length);
         setCurrentSuggestion(suggestion);
+        setFullSuggestion(bestMatch);
       } else {
         setCurrentSuggestion('');
+        setFullSuggestion('');
       }
     } else {
       setCurrentSuggestion('');
+      setFullSuggestion('');
     }
   }, [chatInput]);
 
@@ -209,6 +214,22 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       e.preventDefault();
       setChatInput(chatInput + currentSuggestion);
       setCurrentSuggestion('');
+      setFullSuggestion('');
+    }
+  };
+
+  // Mobile-friendly suggestion tap handler
+  const handleSuggestionTap = () => {
+    if (fullSuggestion) {
+      setChatInput(fullSuggestion);
+      setCurrentSuggestion('');
+      setFullSuggestion('');
+      // Keep focus on input after suggestion tap
+      if (inputRef.current) {
+        setTimeout(() => {
+          inputRef.current.focus();
+        }, 0);
+      }
     }
   };
 
@@ -226,22 +247,32 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       </div>
 
       {/* Chat Messages Area */}
-      <div className="flex-1 pt-24 pb-32 px-4 overflow-y-auto">
-        <div className="max-w-sm mx-auto space-y-4">
-          {messages.map((message) => (
+      <div className="flex-1 pt-24 pb-32 px-4 overflow-y-auto flex flex-col-reverse items-start">
+        <div className="w-full space-y-6 flex flex-col-reverse items-start">
+          {[...messages].reverse().map((message) => (
             <div
               key={message.id}
-              className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex w-full ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-2`}
             >
               {message.type === 'ai' && (
                 <div className="flex items-start gap-3 max-w-xs">
-                  {/* AI Avatar - WhatsApp style with heart */}
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF6B6B' }}>
-                    <Heart className="w-5 h-5 text-white fill-white" />
+                  {/* Custom AI Avatar */}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF4B4B' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path 
+                        d="M12 3C7.031 3 3 6.805 3 11.25C3 13.448 4.016 15.443 5.635 16.856L5 21L9.204 19.08C10.093 19.36 11.025 19.5 12 19.5C16.969 19.5 21 15.694 21 11.25C21 6.805 16.969 3 12 3Z"
+                        stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      />
+                      <path 
+                        d="M12 9.5C11.7 8.9 11 8.5 10.25 8.5C9.01 8.5 8 9.51 8 10.75C8 12.5 10 13.75 12 15C14 13.75 16 12.5 16 10.75C16 9.51 14.99 8.5 13.75 8.5C13 8.5 12.3 8.9 12 9.5Z"
+                        fill="white"
+                      />
+                    </svg>
                   </div>
+                  
                   {/* AI Message Bubble */}
-                  <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                    <p className="text-gray-800 text-sm leading-relaxed">
+                  <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+                    <p className="text-sm leading-relaxed" style={{ color: '#730505' }}>
                       {message.content.split('\n').map((line, index) => (
                         <span key={index}>
                           {line}
@@ -254,10 +285,12 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
               )}
               
               {message.type === 'user' && (
-                <div className="rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm max-w-xs" style={{ backgroundColor: '#FF6B6B' }}>
-                  <p className="text-white text-sm leading-relaxed">
-                    {message.content}
-                  </p>
+                <div className="flex justify-end max-w-xs ml-auto">
+                  <div className="rounded-2xl rounded-tr-sm px-5 py-4 shadow-sm" style={{ backgroundColor: '#FF6B6B' }}>
+                    <p className="text-sm leading-relaxed" style={{ color: '#982323' }}>
+                      {message.content}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -265,14 +298,14 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
           
           {/* Loading indicator for n8n response */}
           {isLoading && (
-            <div className="flex justify-start">
+            <div className="flex justify-start w-full mb-2">
               <div className="flex items-start gap-3 max-w-xs">
                 {/* AI Avatar */}
                 <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF6B6B' }}>
                   <Heart className="w-5 h-5 text-white fill-white" />
                 </div>
                 {/* Loading Bubble */}
-                <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
@@ -285,15 +318,15 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
 
           {/* Error message */}
           {error && (
-            <div className="flex justify-start">
+            <div className="flex justify-start w-full mb-2">
               <div className="flex items-start gap-3 max-w-xs">
                 {/* AI Avatar */}
                 <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF6B6B' }}>
                   <Heart className="w-5 h-5 text-white fill-white" />
                 </div>
                 {/* Error Bubble */}
-                <div className="bg-red-100 border border-red-300 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                  <p className="text-red-700 text-sm">{error}</p>
+                <div className="bg-red-100 border border-red-300 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+                  <p className="text-sm" style={{ color: '#730505' }}>{error}</p>
                 </div>
               </div>
             </div>
@@ -308,7 +341,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       <div className="fixed bottom-0 left-0 right-0 px-4 py-6" style={{ backgroundColor: '#FFF6F3' }}>
         <div className="max-w-sm mx-auto">
           <div className="relative">
-            <div className="rounded-2xl px-4 py-4 shadow-sm" style={{ backgroundColor: '#FFEAE3' }}>
+            <div className="rounded-2xl px-4 py-4 shadow-sm" style={{ backgroundColor: '#FFFFFF' }}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative" style={{ minHeight: '20px' }}>
                   <input
@@ -325,24 +358,37 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                       }
                     }}
                     placeholder="Ask for relationship advice..."
-                    className="w-full outline-none text-gray-700 placeholder-gray-500 bg-transparent relative z-20 caret-gray-700 text-sm"
-                    style={{ fontSize: '14px', lineHeight: '20px', background: 'transparent' }}
+                    className="w-full outline-none bg-transparent relative z-20 text-sm"
+                    style={{ 
+                      color: '#8A8A8A',
+                      caretColor: '#8A8A8A',
+                      fontSize: '16px', // Prevents zoom on iOS
+                      lineHeight: '20px', 
+                      background: 'transparent',
+                      WebkitAppearance: 'none', // Removes default styling on iOS
+                      borderRadius: '0', // Prevents rounded corners on iOS
+                      transform: 'translateZ(0)' // Forces hardware acceleration to prevent zoom
+                    }}
                     autoComplete="off"
                     spellCheck="false"
                   />
                   
-                  {/* Email-style inline suggestion overlay */}
+                  {/* Email-style inline suggestion overlay - Now clickable on mobile */}
                   {currentSuggestion && chatInput.trim() && (
                     <div 
-                      className="absolute top-0 left-0 pointer-events-none z-10 select-none"
+                      className="absolute top-0 left-0 z-10 select-none cursor-pointer"
                       style={{ 
-                        fontSize: '14px', 
+                        fontSize: '16px', // Match input font size
                         lineHeight: '20px',
                         fontFamily: 'inherit',
-                        color: 'transparent'
+                        color: 'transparent',
+                        pointerEvents: 'auto' // Enable touch events
                       }}
+                      onClick={handleSuggestionTap}
+                      onTouchEnd={handleSuggestionTap} // Better mobile support
                     >
-                      <span style={{ color: 'transparent' }}>{chatInput}</span><span style={{ color: '#9CA3AF', opacity: 0.7 }}>{currentSuggestion}</span>
+                      <span style={{ color: 'transparent' }}>{chatInput}</span>
+                      <span style={{ color: '#9CA3AF', opacity: 0.7 }}>{currentSuggestion}</span>
                     </div>
                   )}
                 </div>
@@ -350,20 +396,32 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                   onClick={() => handleSendMessage(chatInput)}
                   disabled={isLoading || !chatInput.trim()}
                   className="p-2 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: '#FF6B6B' }}
+                  style={{ backgroundColor: '#FFDEDE' }}
                 >
-                  <Send className="w-4 h-4 text-white" />
+                  <Send className="w-4 h-4" style={{ color: '#982323' }} />
                 </button>
               </div>
             </div>
             {currentSuggestion && chatInput.trim() && (
               <p className="text-xs text-gray-500 mt-2 px-4">
-                Press Tab to complete
+                Tap on suggestion to complete • Press Tab on desktop
               </p>
             )}
           </div>
         </div>
       </div>
+
+      {/* Add viewport meta tag styles to prevent zoom */}
+      <style jsx>{`
+        @media screen and (max-width: 768px) {
+          input[type="text"] {
+            font-size: 16px !important;
+            -webkit-text-size-adjust: 100%;
+            -webkit-appearance: none;
+            -webkit-border-radius: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 };
