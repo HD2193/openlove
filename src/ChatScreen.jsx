@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, Heart } from 'lucide-react';
 
@@ -234,6 +233,16 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
     }
   };
 
+  // iOS zoom prevention - handle input focus
+  const handleInputFocus = (e) => {
+    // Prevent viewport zoom on iOS by scrolling the input into view
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      setTimeout(() => {
+        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col relative" style={{ backgroundColor: '#FFF6F3' }}>
       {/* Header with Back Button */}
@@ -350,6 +359,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                     type="text"
                     value={chatInput}
                     onChange={handleInputChange}
+                    onFocus={handleInputFocus}
                     onKeyDown={(e) => {
                       handleTabCompletion(e);
                       // Send message on Enter key
@@ -359,19 +369,32 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                       }
                     }}
                     placeholder="Ask for relationship advice..."
-                    className="w-full outline-none bg-transparent relative z-20 text-sm"
+                    className="ios-input-fix w-full outline-none bg-transparent relative z-20 text-sm"
                     style={{ 
                       color: '#8A8A8A',
                       caretColor: '#8A8A8A',
-                      fontSize: '16px', // Prevents zoom on iOS
-                      lineHeight: '20px', 
+                      fontSize: '16px', // Critical: 16px prevents zoom on iOS
+                      lineHeight: '1.2',
                       background: 'transparent',
-                      WebkitAppearance: 'none', // Removes default styling on iOS
-                      borderRadius: '0', // Prevents rounded corners on iOS
-                      transform: 'translateZ(0)' // Forces hardware acceleration to prevent zoom
+                      WebkitAppearance: 'none',
+                      WebkitBorderRadius: '0',
+                      border: 'none',
+                      outline: 'none',
+                      boxShadow: 'none',
+                      WebkitBoxShadow: 'none',
+                      MozAppearance: 'textfield',
+                      WebkitTextSizeAdjust: '100%',
+                      textSizeAdjust: '100%',
+                      WebkitUserSelect: 'text',
+                      userSelect: 'text',
+                      WebkitTouchCallout: 'default',
+                      WebkitTapHighlightColor: 'transparent'
                     }}
                     autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
                     spellCheck="false"
+                    inputMode="text"
                   />
                   
                   {/* Email-style inline suggestion overlay - Now clickable on mobile */}
@@ -379,8 +402,8 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                     <div 
                       className="absolute top-0 left-0 z-10 select-none cursor-pointer"
                       style={{ 
-                        fontSize: '16px', // Match input font size
-                        lineHeight: '20px',
+                        fontSize: '16px', // Match input font size exactly
+                        lineHeight: '1.2', // Match input line height
                         fontFamily: 'inherit',
                         color: 'transparent',
                         pointerEvents: 'auto' // Enable touch events
@@ -412,15 +435,65 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         </div>
       </div>
 
-      {/* Add viewport meta tag styles to prevent zoom */}
+      {/* Enhanced iOS zoom prevention styles */}
       <style jsx>{`
-        @media screen and (max-width: 768px) {
-          input[type="text"] {
+        .ios-input-fix {
+          /* Critical iOS zoom prevention rules */
+          font-size: 16px !important;
+          -webkit-text-size-adjust: 100% !important;
+          -webkit-appearance: none !important;
+          -webkit-border-radius: 0 !important;
+          border-radius: 0 !important;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+          -webkit-box-shadow: none !important;
+          background-clip: padding-box !important;
+          -webkit-background-clip: padding-box !important;
+        }
+        
+        /* Additional iOS specific fixes */
+        @supports (-webkit-touch-callout: none) {
+          .ios-input-fix {
             font-size: 16px !important;
-            -webkit-text-size-adjust: 100%;
-            -webkit-appearance: none;
-            -webkit-border-radius: 0;
+            transform: translateZ(0) !important;
+            -webkit-transform: translateZ(0) !important;
           }
+        }
+        
+        /* Prevent zoom on focus for all iOS devices */
+        @media screen and (max-device-width: 768px) and (-webkit-min-device-pixel-ratio: 1) {
+          .ios-input-fix {
+            font-size: 16px !important;
+            -webkit-text-size-adjust: none !important;
+            text-size-adjust: none !important;
+          }
+        }
+        
+        /* iPhone specific */
+        @media only screen and (max-device-width: 480px) and (-webkit-min-device-pixel-ratio: 2) {
+          .ios-input-fix {
+            font-size: 16px !important;
+          }
+        }
+        
+        /* iPad specific */
+        @media only screen and (max-device-width: 1024px) and (-webkit-min-device-pixel-ratio: 1) {
+          .ios-input-fix {
+            font-size: 16px !important;
+          }
+        }
+        
+        /* Remove input styling that might trigger zoom */
+        input[type="text"].ios-input-fix:focus {
+          outline: none !important;
+          border: none !important;
+          box-shadow: none !important;
+          -webkit-box-shadow: none !important;
+          -webkit-appearance: none !important;
+          zoom: 1 !important;
+          -webkit-transform: translateZ(0) !important;
+          transform: translateZ(0) !important;
         }
       `}</style>
     </div>
