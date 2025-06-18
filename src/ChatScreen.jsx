@@ -127,7 +127,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
 
     } catch (error) {
       console.error('❌ n8n integration error:', error);
-      setError('Sorry, I\'m having trouble connecting right now. Please try again.');
+     
       
       // Fallback response if n8n fails
       return 'I apologize, but I\'m experiencing some technical difficulties. Please try asking your question again in a moment.';
@@ -287,7 +287,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
               
               {message.type === 'user' && (
                 <div className="flex justify-end max-w-xs ml-auto">
-                  <div className="rounded-2xl rounded-tr-sm px-5 py-4 shadow-sm" style={{ backgroundColor: '#FF6B6B' }}>
+                  <div className="rounded-2xl rounded-tr-sm px-5 py-4 shadow-sm" style={{ backgroundColor: '#FFD6D6' }}>
                     <p className="text-sm leading-relaxed" style={{ color: '#982323' }}>
                       {message.content}
                     </p>
