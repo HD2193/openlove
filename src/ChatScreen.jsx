@@ -4,21 +4,17 @@ import { ArrowLeft, Send, Heart } from 'lucide-react';
 // ========================================
 // 🔗 N8N WEBHOOK INTEGRATION SETUP
 // ========================================
-// Your actual n8n webhook URL
-const N8N_WEBHOOK_URL = 'https://vishp.app.n8n.cloud/webhook/39681a43-2925-40e7-8c54-24fa9397ad48/chat ';
+// Fixed webhook URL (removed trailing space)
+const N8N_WEBHOOK_URL = 'https://vishp.app.n8n.cloud/webhook/39681a43-2925-40e7-8c54-24fa9397ad48/chat';
 
-// API Configuration for n8n integration
+// Enhanced API Configuration
 const API_CONFIG = {
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    // Add CORS headers if needed
-    'Access-Control-Allow-Origin': '*',
-    // Add any authentication headers your n8n webhook requires if needed
-    // 'Authorization': 'Bearer your-token-here',
-    // 'X-API-Key': 'your-api-key-here'
+    'X-Requested-With': 'XMLHttpRequest'
   },
-  timeout: 30000 // 30 second timeout
+  timeout: 45000 // Increased timeout to 45 seconds
 };
 
 const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
@@ -74,7 +70,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
   };
 
   // ========================================
-  // 🚀 IMPROVED N8N API INTEGRATION FUNCTIONS
+  // 🚀 ENHANCED N8N API INTEGRATION FUNCTIONS
   // ========================================
   
   /**
@@ -88,74 +84,157 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       setIsLoading(true);
       setError(null);
 
-      console.log('🔍 Testing N8N webhook accessibility...');
+      console.log('🔍 Sending message to N8N webhook...');
 
-      // Simplified payload - start with the most basic format
+      // Enhanced payload structure that matches n8n chat trigger expectations
       const payload = {
+        chatInput: userMessage,
+        sessionId: `session_${Date.now()}`,
+        action: 'sendMessage',
         message: userMessage,
         category: category || 'general',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        metadata: {
+          userAgent: navigator.userAgent,
+          origin: window.location.origin
+        }
       };
 
-      console.log('🚀 Sending to n8n:', payload);
+      console.log('🚀 Sending payload to n8n:', payload);
 
-      // Create fetch request with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+      // Multiple request strategies to handle CORS issues
+      let response;
 
-      const response = await fetch(N8N_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
+      try {
+        response = await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
+      } catch (err) {
+        console.error('❌ Fetch failed:', err);
+        throw err;
+      }
+      // Try different request strategies
+      for (let i = 0; i < requestOptions.length; i++) {
+        try {
+          console.log(`🔄 Trying request strategy ${i + 1}...`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
 
-      clearTimeout(timeoutId);
+          let url = N8N_WEBHOOK_URL;
+          
+          // For GET request strategy, append query parameters
+          if (requestOptions[i].method === 'GET') {
+            const params = new URLSearchParams({
+              message: userMessage,
+              category: category || 'general',
+              sessionId: `session_${Date.now()}`,
+              timestamp: new Date().toISOString()
+            });
+            url += `?${params.toString()}`;
+          }
 
-      console.log(`📡 Response status: ${response.status}`);
-      console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+          response = await fetch(url, {
+            ...requestOptions[i],
+            signal: controller.signal
+          });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ N8N webhook failed with status ${response.status}:`, errorText);
-        throw new Error(`N8N webhook failed: ${response.status} - ${errorText || response.statusText}`);
+          clearTimeout(timeoutId);
+
+          console.log(`📡 Strategy ${i + 1} Response status: ${response.status}`);
+          console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+
+          // If we get a successful response, break out of the loop
+          if (response.ok || response.status < 500) {
+            break;
+          }
+
+        } catch (err) {
+          console.error(`❌ Strategy ${i + 1} failed:`, err);
+          lastError = err;
+          
+          // If this is the last strategy, we'll throw the error
+          if (i === requestOptions.length - 1) {
+            throw err;
+          }
+          
+          // Wait a bit before trying next strategy
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
 
-      // Try to parse the response
+      if (!response) {
+        throw lastError || new Error('All request strategies failed');
+      }
+
+      // Handle different response scenarios
       let data;
-      const contentType = response.headers.get('content-type');
-      
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        // If not JSON, treat as text
-        data = await response.text();
+      let aiResponse = '';
+
+      try {
+        // First, try to get response text
+        const responseText = await response.text();
+        console.log('📦 Raw response:', responseText);
+
+        // If response is empty but status is ok, return a default message
+        if (!responseText && response.ok) {
+          return "I received your message! However, I'm getting an empty response from the AI service. Please try asking your question again.";
+        }
+
+        // Try to parse as JSON
+        if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            console.warn('Failed to parse JSON, treating as plain text:', parseError);
+            data = responseText;
+          }
+        } else {
+          data = responseText;
+        }
+
+      } catch (textError) {
+        console.error('Failed to get response text:', textError);
+        throw new Error('Failed to read response from webhook');
       }
 
-      console.log('✅ N8N response:', data);
+      console.log('✅ Processed N8N response:', data);
 
-      // Extract AI response from n8n return data
-      let aiResponse = '';
-      
+      // Extract AI response from various possible response formats
       if (typeof data === 'string') {
-        aiResponse = data;
+        aiResponse = data.trim();
       } else if (data && typeof data === 'object') {
         // Try various common response field names
-        aiResponse = data.response || 
+        aiResponse = data.output || 
+                    data.response || 
                     data.message || 
                     data.ai_response || 
                     data.text || 
                     data.answer || 
                     data.reply || 
-                    data.output ||
                     data.result ||
                     data.content ||
+                    data.data ||
                     '';
                     
-        // If it's an array, try to get the first item
+        // Handle nested response structures
+        if (!aiResponse && data.body) {
+          if (typeof data.body === 'string') {
+            aiResponse = data.body;
+          } else if (data.body.response || data.body.message) {
+            aiResponse = data.body.response || data.body.message;
+          }
+        }
+                    
+        // If it's an array, try to get the first meaningful item
         if (Array.isArray(data) && data.length > 0) {
           const firstItem = data[0];
           if (typeof firstItem === 'string') {
@@ -165,13 +244,20 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                        firstItem.message || 
                        firstItem.text || 
                        firstItem.content || 
-                       JSON.stringify(firstItem);
+                       firstItem.output ||
+                       '';
           }
         }
         
-        // If still no response, try to stringify the whole object
+        // If still no response and we have data, try to extract meaningful content
         if (!aiResponse && data) {
-          aiResponse = JSON.stringify(data);
+          // Look for any string values in the object
+          const stringValues = Object.values(data).filter(val => 
+            typeof val === 'string' && val.trim().length > 0
+          );
+          if (stringValues.length > 0) {
+            aiResponse = stringValues[0];
+          }
         }
       }
       
@@ -180,15 +266,22 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         // Remove JSON artifacts if present
         aiResponse = aiResponse.replace(/^["']|["']$/g, ''); // Remove quotes
         aiResponse = aiResponse.replace(/\\n/g, '\n'); // Convert escaped newlines
+        aiResponse = aiResponse.replace(/\\t/g, ' '); // Convert escaped tabs
+        aiResponse = aiResponse.replace(/\\\//g, '/'); // Convert escaped slashes
         aiResponse = aiResponse.trim();
         
-        if (aiResponse.length > 0) {
+        if (aiResponse && aiResponse.length > 0) {
           return aiResponse;
         }
       }
       
-      // If we couldn't extract a meaningful response
-      throw new Error('Could not extract response text from webhook response');
+      // If we couldn't extract a meaningful response but got a successful status
+      if (response.ok) {
+        return "I received your message successfully, but I'm having trouble processing the response right now. Could you please try rephrasing your question?";
+      }
+      
+      // If response wasn't ok, throw an error
+      throw new Error(`Webhook returned status ${response.status}: ${response.statusText}`);
 
     } catch (error) {
       console.error('❌ N8N integration error:', error);
@@ -196,21 +289,24 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       let errorMessage = 'I apologize, but I\'m having trouble connecting to the AI service right now. ';
       
       if (error.name === 'AbortError') {
-        errorMessage += 'The request timed out. Please try again.';
+        errorMessage += 'The request timed out. Please try again with a shorter message.';
       } else if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
         errorMessage += 'Please check your internet connection and try again.';
+      } else if (error.message.includes('CORS')) {
+        errorMessage += 'There\'s a connection security issue. The webhook may need to be reconfigured for CORS.';
       } else if (error.message.includes('500')) {
         errorMessage += 'The AI service is temporarily unavailable. Please try again in a moment.';
       } else if (error.message.includes('404')) {
-        errorMessage += 'The AI service endpoint could not be found. Please contact support.';
-      } else if (error.message.includes('CORS')) {
-        errorMessage += 'There\'s a connection security issue. Please try refreshing the page.';
+        errorMessage += 'The AI service endpoint could not be found. The webhook URL may be incorrect.';
+      } else if (error.message.includes('403') || error.message.includes('401')) {
+        errorMessage += 'Access to the AI service was denied. The webhook may need authentication setup.';
       } else {
-        errorMessage += 'Please try asking your question again.';
+        errorMessage += 'Please try asking your question again in a moment.';
       }
       
-      setError(null); // Don't set error in state - just return the message
+      // Don't set error in state - just return the message so chat continues to work
       return errorMessage;
+      
     } finally {
       setIsLoading(false);
     }
@@ -223,11 +319,11 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
   const handleSendMessage = async (message) => {
     if (!message.trim()) return;
 
-    // Add user message to chat
+    // Add user message to chat immediately
     const userMessage = {
       id: Date.now(),
       type: 'user',
-      content: message,
+      content: message.trim(),
       timestamp: new Date()
     };
 
@@ -237,17 +333,32 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
     setFullSuggestion('');
 
     // 🤖 SEND TO N8N AND GET AI RESPONSE
-    const aiResponse = await sendToN8N(message);
+    try {
+      const aiResponse = await sendToN8N(message.trim());
 
-    // Add AI response to chat
-    const aiMessage = {
-      id: Date.now() + 1,
-      type: 'ai',
-      content: aiResponse,
-      timestamp: new Date()
-    };
+      // Add AI response to chat
+      const aiMessage = {
+        id: Date.now() + 1,
+        type: 'ai',
+        content: aiResponse,
+        timestamp: new Date()
+      };
 
-    setMessages(prev => [...prev, aiMessage]);
+      setMessages(prev => [...prev, aiMessage]);
+      
+    } catch (error) {
+      console.error('Error in handleSendMessage:', error);
+      
+      // Add error message to chat
+      const errorMessage = {
+        id: Date.now() + 1,
+        type: 'ai',
+        content: "I'm sorry, I encountered an unexpected error. Please try sending your message again.",
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    }
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -476,6 +587,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                     autoCapitalize="off"
                     spellCheck={false}
                     inputMode="text"
+                    disabled={isLoading}
                   />
                   
                   {/* Email-style inline suggestion overlay - Now clickable on mobile */}
