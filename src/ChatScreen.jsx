@@ -4,14 +4,17 @@ import { ArrowLeft, Send, Heart } from 'lucide-react';
 // ========================================
 // 🔗 N8N WEBHOOK INTEGRATION SETUP
 // ========================================
-// Replace this URL with your n8n webhook URL
-const N8N_WEBHOOK_URL = 'https://your-n8n-instance.com/webhook/openlove-ai';
+// Your actual n8n webhook URL
+const N8N_WEBHOOK_URL = 'https://vishp.app.n8n.cloud/webhook/39681a43-2925-40e7-8c54-24fa9397ad48/chat ';
 
 // API Configuration for n8n integration
 const API_CONFIG = {
   headers: {
     'Content-Type': 'application/json',
-    // Add any authentication headers your n8n webhook requires
+    'Accept': 'application/json',
+    // Add CORS headers if needed
+    'Access-Control-Allow-Origin': '*',
+    // Add any authentication headers your n8n webhook requires if needed
     // 'Authorization': 'Bearer your-token-here',
     // 'X-API-Key': 'your-api-key-here'
   },
@@ -32,7 +35,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
     {
       id: 1,
       type: 'ai',
-      content: "Hi there ! I'm OpenLove AI.\nHow can I help you today?",
+      content: "Hi there! I'm OpenLove AI.\nHow can I help you today?",
       timestamp: new Date()
     }
   ]);
@@ -71,7 +74,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
   };
 
   // ========================================
-  // 🚀 N8N API INTEGRATION FUNCTIONS
+  // 🚀 IMPROVED N8N API INTEGRATION FUNCTIONS
   // ========================================
   
   /**
@@ -85,51 +88,129 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       setIsLoading(true);
       setError(null);
 
-      // Prepare payload for n8n webhook
+      console.log('🔍 Testing N8N webhook accessibility...');
+
+      // Simplified payload - start with the most basic format
       const payload = {
         message: userMessage,
-        category: category,
-        conversation_id: `openlove_${Date.now()}`, // Unique conversation ID
-        user_id: 'user_123', // Replace with actual user ID if you have user authentication
-        timestamp: new Date().toISOString(),
-        // Add any additional context your n8n workflow needs
-        context: {
-          previous_messages: messages.slice(-5), // Send last 5 messages for context
-          session_data: {
-            selected_category: selectedCategory,
-            screen: 'chat'
-          }
-        }
+        category: category || 'general',
+        timestamp: new Date().toISOString()
       };
 
       console.log('🚀 Sending to n8n:', payload);
 
-      // 🔗 MAIN N8N WEBHOOK CALL - REPLACE URL BELOW
+      // Create fetch request with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
-        headers: API_CONFIG.headers,
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
+      console.log(`📡 Response status: ${response.status}`);
+      console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error(`n8n webhook failed: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`❌ N8N webhook failed with status ${response.status}:`, errorText);
+        throw new Error(`N8N webhook failed: ${response.status} - ${errorText || response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log('✅ n8n response:', data);
+      // Try to parse the response
+      let data;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, treat as text
+        data = await response.text();
+      }
+
+      console.log('✅ N8N response:', data);
 
       // Extract AI response from n8n return data
-      // Adjust this based on your n8n workflow response structure
-      const aiResponse = data.response || data.message || data.ai_response || 'Sorry, I couldn\'t process that right now.';
+      let aiResponse = '';
       
-      return aiResponse;
+      if (typeof data === 'string') {
+        aiResponse = data;
+      } else if (data && typeof data === 'object') {
+        // Try various common response field names
+        aiResponse = data.response || 
+                    data.message || 
+                    data.ai_response || 
+                    data.text || 
+                    data.answer || 
+                    data.reply || 
+                    data.output ||
+                    data.result ||
+                    data.content ||
+                    '';
+                    
+        // If it's an array, try to get the first item
+        if (Array.isArray(data) && data.length > 0) {
+          const firstItem = data[0];
+          if (typeof firstItem === 'string') {
+            aiResponse = firstItem;
+          } else if (firstItem && typeof firstItem === 'object') {
+            aiResponse = firstItem.response || 
+                       firstItem.message || 
+                       firstItem.text || 
+                       firstItem.content || 
+                       JSON.stringify(firstItem);
+          }
+        }
+        
+        // If still no response, try to stringify the whole object
+        if (!aiResponse && data) {
+          aiResponse = JSON.stringify(data);
+        }
+      }
+      
+      // Clean up the response
+      if (aiResponse) {
+        // Remove JSON artifacts if present
+        aiResponse = aiResponse.replace(/^["']|["']$/g, ''); // Remove quotes
+        aiResponse = aiResponse.replace(/\\n/g, '\n'); // Convert escaped newlines
+        aiResponse = aiResponse.trim();
+        
+        if (aiResponse.length > 0) {
+          return aiResponse;
+        }
+      }
+      
+      // If we couldn't extract a meaningful response
+      throw new Error('Could not extract response text from webhook response');
 
     } catch (error) {
-      console.error('❌ n8n integration error:', error);
-     
+      console.error('❌ N8N integration error:', error);
       
-      // Fallback response if n8n fails
-      return 'I apologize, but I\'m experiencing some technical difficulties. Please try asking your question again in a moment.';
+      let errorMessage = 'I apologize, but I\'m having trouble connecting to the AI service right now. ';
+      
+      if (error.name === 'AbortError') {
+        errorMessage += 'The request timed out. Please try again.';
+      } else if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+        errorMessage += 'Please check your internet connection and try again.';
+      } else if (error.message.includes('500')) {
+        errorMessage += 'The AI service is temporarily unavailable. Please try again in a moment.';
+      } else if (error.message.includes('404')) {
+        errorMessage += 'The AI service endpoint could not be found. Please contact support.';
+      } else if (error.message.includes('CORS')) {
+        errorMessage += 'There\'s a connection security issue. Please try refreshing the page.';
+      } else {
+        errorMessage += 'Please try asking your question again.';
+      }
+      
+      setError(null); // Don't set error in state - just return the message
+      return errorMessage;
     } finally {
       setIsLoading(false);
     }
@@ -312,7 +393,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
               <div className="flex items-start gap-3 max-w-xs">
                 {/* AI Avatar */}
                 <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF6B6B' }}>
-                  <Heart className="w-5 h-5 text-white fill-white" />
+                  <Heart className="w-5 h-5 text-white" fill="currentColor" />
                 </div>
                 {/* Loading Bubble */}
                 <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
@@ -326,13 +407,13 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
             </div>
           )}
 
-          {/* Error message */}
+          {/* Error message - Only show if there's a current error */}
           {error && (
             <div className="flex justify-start w-full mb-2">
               <div className="flex items-start gap-3 max-w-xs">
                 {/* AI Avatar */}
                 <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF6B6B' }}>
-                  <Heart className="w-5 h-5 text-white fill-white" />
+                  <Heart className="w-5 h-5 text-white" fill="currentColor" />
                 </div>
                 {/* Error Bubble */}
                 <div className="bg-red-100 border border-red-300 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
@@ -393,7 +474,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="off"
-                    spellCheck="false"
+                    spellCheck={false}
                     inputMode="text"
                   />
                   
