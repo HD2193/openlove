@@ -121,60 +121,7 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         console.error('❌ Fetch failed:', err);
         throw err;
       }
-      // Try different request strategies
-      for (let i = 0; i < requestOptions.length; i++) {
-        try {
-          console.log(`🔄 Trying request strategy ${i + 1}...`);
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
-
-          let url = N8N_WEBHOOK_URL;
-          
-          // For GET request strategy, append query parameters
-          if (requestOptions[i].method === 'GET') {
-            const params = new URLSearchParams({
-              message: userMessage,
-              category: category || 'general',
-              sessionId: `session_${Date.now()}`,
-              timestamp: new Date().toISOString()
-            });
-            url += `?${params.toString()}`;
-          }
-
-          response = await fetch(url, {
-            ...requestOptions[i],
-            signal: controller.signal
-          });
-
-          clearTimeout(timeoutId);
-
-          console.log(`📡 Strategy ${i + 1} Response status: ${response.status}`);
-          console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
-
-          // If we get a successful response, break out of the loop
-          if (response.ok || response.status < 500) {
-            break;
-          }
-
-        } catch (err) {
-          console.error(`❌ Strategy ${i + 1} failed:`, err);
-          lastError = err;
-          
-          // If this is the last strategy, we'll throw the error
-          if (i === requestOptions.length - 1) {
-            throw err;
-          }
-          
-          // Wait a bit before trying next strategy
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      if (!response) {
-        throw lastError || new Error('All request strategies failed');
-      }
-
+      
       // Handle different response scenarios
       let data;
       let aiResponse = '';
