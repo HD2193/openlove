@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, Heart } from 'lucide-react';
 
@@ -23,6 +24,10 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
   const [fullSuggestion, setFullSuggestion] = useState('');
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+
   
   // ========================================
   // 🤖 AI CHAT STATE MANAGEMENT
@@ -35,9 +40,9 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
       timestamp: new Date()
     }
   ]);
-  const [isLoading, setIsLoading] = useState(false);
+ 
   const [error, setError] = useState(null);
-
+  const [isLoading, setIsLoading] = useState(false);
   // Predefined questions for auto-suggestions
   const questionDatabase = [
     "How can I tell if they're really into me?",
@@ -268,13 +273,18 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
 
     // Add user message to chat immediately
     const userMessage = {
-      id: Date.now(),
+      id: `user_${Date.now()}_${Math.random()}`,
       type: 'user',
       content: message.trim(),
       timestamp: new Date()
     };
-
     setMessages(prev => [...prev, userMessage]);
+    
+    // Add loading message
+    setTimeout(() => {
+      setMessages(prev => [...prev, { id: 'loading-' + Date.now(), type: 'loading' }]);
+    }, 100);
+
     setChatInput('');
     setCurrentSuggestion('');
     setFullSuggestion('');
@@ -291,7 +301,11 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         timestamp: new Date()
       };
 
-      setMessages(prev => [...prev, aiMessage]);
+      setMessages(prev => {
+        // Remove loading message and add AI response
+        const withoutLoading = prev.filter(msg => msg.type !== 'loading');
+        return [...withoutLoading, aiMessage];
+      });
       
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
@@ -304,14 +318,59 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         timestamp: new Date()
       };
 
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => {
+        // Remove loading message and add error response
+        const withoutLoading = prev.filter(msg => msg.type !== 'loading');
+        return [...withoutLoading, errorMessage];
+      });
     }
   };
 
-  // Auto-scroll to bottom when new messages arrive
+  // Fixed auto-scroll logic - only scroll when AI responds
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const lastMessage = messages[messages.length - 1];
+    
+    // Only auto-scroll when:
+    // 1. It's an AI message (not user message)
+    // 2. It's a loading message
+    // 3. The user hasn't manually scrolled up
+    if (shouldAutoScroll && (lastMessage?.type === 'ai' || lastMessage?.type === 'loading')) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [messages, shouldAutoScroll]);
+
+  // Enhanced scroll detection
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    let scrollTimeout;
+    
+    const handleScroll = () => {
+      clearTimeout(scrollTimeout);
+      
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+      
+      // User is scrolling manually
+      setIsUserScrolling(true);
+      setShouldAutoScroll(isNearBottom);
+      
+      // Reset scrolling state after user stops scrolling
+      scrollTimeout = setTimeout(() => {
+        setIsUserScrolling(false);
+      }, 1000);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, []);
 
   // Auto-suggestion logic with email-style completion
   useEffect(() => {
@@ -395,16 +454,20 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
         </button>
       </div>
 
-      {/* Chat Messages Area */}
-      <div className="flex-1 pt-24 pb-32 px-4 overflow-y-auto flex flex-col-reverse items-start">
-        <div className="w-full space-y-6 flex flex-col-reverse items-start">
-          {[...messages].reverse().map((message) => (
+      {/* Chat Messages Area - FIXED STRUCTURE */}
+      <div 
+  ref={chatContainerRef}
+  className="flex-1 pt-24 pb-32 px-4 overflow-y-auto flex flex-col justify-end"
+  style={{ scrollBehavior: 'smooth' }}
+>
+        <div className="w-full space-y-6">
+          {messages.map((message) => (
             <div
               key={message.id}
               className={`flex w-full ${message.type === 'user' ? 'justify-end' : 'justify-start'} mb-2`}
             >
               {message.type === 'ai' && (
-                <div className="flex items-start gap-3 max-w-xs">
+                <div className="flex items-end gap-3 max-w-xs">
                   {/* Custom AI Avatar */}
                   <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF4B4B' }}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -432,39 +495,46 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                   </div>
                 </div>
               )}
-              
-              {message.type === 'user' && (
-                <div className="flex justify-end max-w-xs ml-auto">
-                  <div className="rounded-2xl rounded-tr-sm px-5 py-4 shadow-sm" style={{ backgroundColor: '#FFD6D6' }}>
-                    <p className="text-sm leading-relaxed" style={{ color: '#982323' }}>
-                      {message.content}
-                    </p>
+
+              {message.type === 'loading' && (
+                <div className="flex items-end gap-3 max-w-xs">
+                  {/* AI Avatar */}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF4B4B' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path 
+                        d="M12 3C7.031 3 3 6.805 3 11.25C3 13.448 4.016 15.443 5.635 16.856L5 21L9.204 19.08C10.093 19.36 11.025 19.5 12 19.5C16.969 19.5 21 15.694 21 11.25C21 6.805 16.969 3 12 3Z"
+                        stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      />
+                      <path 
+                        d="M12 9.5C11.7 8.9 11 8.5 10.25 8.5C9.01 8.5 8 9.51 8 10.75C8 12.5 10 13.75 12 15C14 13.75 16 12.5 16 10.75C16 9.51 14.99 8.5 13.75 8.5C13 8.5 12.3 8.9 12 9.5Z"
+                        fill="white"
+                      />
+                    </svg>
+                  </div>
+                  
+                  {/* Loading Message Bubble */}
+                  <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
-          ))}
-          
-          {/* Loading indicator for n8n response */}
-          {isLoading && (
-            <div className="flex justify-start w-full mb-2">
-              <div className="flex items-start gap-3 max-w-xs">
-                {/* AI Avatar */}
-                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FF6B6B' }}>
-                  <Heart className="w-5 h-5 text-white" fill="currentColor" />
-                </div>
-                {/* Loading Bubble */}
-                <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
+              {message.type === 'user' && (
+              <div className="flex justify-end items-end max-w-xs ml-auto">
+              <div className="rounded-2xl rounded-tr-sm px-5 py-4 shadow-sm" style={{ backgroundColor: '#FFD6D6' }}>
+             <p className="text-sm leading-relaxed" style={{ color: '#982323' }}>
+            {message.content}
+             </p>
+             </div>
+           </div>
+           )}
+         </div>
+        ))}
+          
           {/* Error message - Only show if there's a current error */}
           {error && (
             <div className="flex justify-start w-full mb-2">
