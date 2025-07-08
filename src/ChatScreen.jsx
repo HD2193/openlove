@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, Heart } from 'lucide-react';
 
@@ -16,6 +15,83 @@ const API_CONFIG = {
     'X-Requested-With': 'XMLHttpRequest'
   },
   timeout: 45000 // Increased timeout to 45 seconds
+};
+
+// ========================================
+// 🎨 TEXT FORMATTING UTILITIES
+// ========================================
+/**
+ * Parse text and convert **text** to bold formatting
+ * @param {string} text - The text to parse
+ * @returns {JSX.Element} - Formatted text with bold elements
+ */
+const parseTextWithBold = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Split text by **bold** pattern while preserving the delimiters
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  
+  return parts.map((part, index) => {
+    // Check if this part is a **bold** section
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      // Remove the ** markers and render as bold
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={index} className="font-semibold">
+          {boldText}
+        </strong>
+      );
+    }
+    // Regular text - preserve line breaks
+    return part.split('\n').map((line, lineIndex) => (
+      <span key={`${index}-${lineIndex}`}>
+        {line}
+        {lineIndex < part.split('\n').length - 1 && <br />}
+      </span>
+    ));
+  });
+};
+
+/**
+ * Alternative parsing function for more complex markdown-like formatting
+ * Supports **bold**, *italic*, and preserves line breaks
+ * @param {string} text - The text to parse
+ * @returns {JSX.Element} - Formatted text with styling
+ */
+const parseMarkdownText = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Split by multiple patterns: **bold**, *italic*, and line breaks
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\n)/g);
+  
+  return parts.map((part, index) => {
+    // Bold text **text**
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={index} className="font-semibold">
+          {boldText}
+        </strong>
+      );
+    }
+    // Italic text *text*
+    else if (part.startsWith('*') && part.endsWith('*') && part.length > 2 && !part.includes('**')) {
+      const italicText = part.slice(1, -1);
+      return (
+        <em key={index} className="italic">
+          {italicText}
+        </em>
+      );
+    }
+    // Line breaks
+    else if (part === '\n') {
+      return <br key={index} />;
+    }
+    // Regular text
+    else {
+      return <span key={index}>{part}</span>;
+    }
+  });
 };
 
 const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
@@ -456,10 +532,10 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
 
       {/* Chat Messages Area - FIXED STRUCTURE */}
       <div 
-  ref={chatContainerRef}
-  className="flex-1 pt-24 pb-32 px-4 overflow-y-auto flex flex-col justify-end"
-  style={{ scrollBehavior: 'smooth' }}
->
+       ref={chatContainerRef}
+       className="flex-1 pt-24 pb-32 px-4 overflow-y-auto flex flex-col justify-end"
+       style={{ scrollBehavior: 'smooth' }}
+       >
         <div className="w-full space-y-6">
           {messages.map((message) => (
             <div
@@ -482,16 +558,11 @@ const ChatScreen = ({ selectedCategory, setCurrentScreen }) => {
                     </svg>
                   </div>
                   
-                  {/* AI Message Bubble */}
+                  {/* AI Message Bubble with Bold Text Support */}
                   <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-                    <p className="text-sm leading-relaxed" style={{ color: '#730505' }}>
-                      {message.content.split('\n').map((line, index) => (
-                        <span key={index}>
-                          {line}
-                          {index < message.content.split('\n').length - 1 && <br />}
-                        </span>
-                      ))}
-                    </p>
+                    <div className="text-sm leading-relaxed" style={{ color: '#730505' }}>
+                      {parseTextWithBold(message.content)}
+                    </div>
                   </div>
                 </div>
               )}
